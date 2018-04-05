@@ -1,5 +1,7 @@
 pragma solidity ^0.4.16;
 
+
+// Базовый интерфейс токенов
 contract ERC20Basic {
   uint256 public totalSupply;
   function balanceOf(address who) public constant returns (uint256);
@@ -28,6 +30,7 @@ library SafeMath {
   }
 }
 
+// Имплементация базового интерфейса
 contract BasicToken is ERC20Basic {
   using SafeMath for uint256;
   mapping(address => uint256) balances;
@@ -42,6 +45,9 @@ contract BasicToken is ERC20Basic {
   }
 }
 
+// Для работы с правами владения смартконтрактом
+// Наследуемые от Ownable классы автоматически сохраняют owner-а
+// И могут использовать модификатор доступа onlyOwner
 contract Ownable {
   address public owner;
   function Ownable() public {
@@ -57,6 +63,7 @@ contract Ownable {
   }
 }
 
+// Эмит
 contract MintableToken is BasicToken, Ownable {
   event Mint(address indexed to, uint256 amount);
   event MintFinished();
@@ -79,6 +86,7 @@ contract MintableToken is BasicToken, Ownable {
   }
 }
 
+// Сжигание нераскупленных токенов, не используется (пока)
 contract BurnableToken is MintableToken {
   function burn(uint _value) public {
     require(_value > 0);
@@ -90,38 +98,72 @@ contract BurnableToken is MintableToken {
   event Burn(address indexed burner, uint indexed value);
 }
 
+// UFO Hotel Coin
+// Сам Coin
 contract UHC is BurnableToken {
   string public constant name = "UFO Hotel Coin";
-  string public constant symbol = "UHT";
+  string public constant symbol = "UHC";
   uint32 public constant decimals = 0;
-  uint256 public INITIAL_SUPPLY = 93600000;
-  function UHC() public {
+  uint256 INITIAL_SUPPLY;
+  function UHC(uint supply) public {
+    INITIAL_SUPPLY = supply;
     totalSupply = INITIAL_SUPPLY;
     balances[msg.sender] = INITIAL_SUPPLY;
   }
 }
 
-contract UHCPresale is Ownable {
+
+// Главный контракт.
+contract UFO is Ownable {
   using SafeMath for uint;
+  mapping (address => uint) privilegies;
   address multisig;
-  UHC public token = new UHC();
+  uint supply;
+//   = 93600000;
+  UHC public token;
+//   = new UHC(supply);
   uint start;
   uint period;
   uint rate;
-  function UHCPresale() public {
-    multisig = 0xEA15Adb66DC92a4BbCcC8Bf32fd25E2e86a2A770;
+  function UFO() public {
+    supply = 93600000;
+    token = new UHC(supply);
+    multisig = 0xEA15Adb66DC92a4BbCcC8Bf32fd25E2e86a2A770; // адрес для эфира
     rate = 1000;
     start = 1522800000;
-    period = 7;
+    period = 7 * 1 days;
+  }
+  function scheduleSale(uint starttime, uint duration) onlyOwner public {
+      start = starttime;
+      period = duration;
+  }
+  function startSale(uint duration) onlyOwner public {
+      start = now;
+      period = duration;
+  }
+  function stopSale() onlyOwner public {
+      period = 0;
   }
   modifier saleIsOn() {
-    require(now > start && now < start + period * 1 days);
+    require(now > start && now < start + period);
     _;
   }
+  function getPrivilegeLevel(address _owner) public view returns(uint level) {
+      return privilegies[_owner];
+  }
   function createTokens() public saleIsOn payable {
+    require(msg.value >= 0);
     multisig.transfer(msg.value);
-    uint tokens = rate.mul(msg.value).div(1 ether);
-    token.transfer(msg.sender, tokens);
+    uint newtokens = rate.mul(msg.value).div(1 ether);
+    token.transfer(msg.sender, newtokens);
+    if (newtokens.div(supply) * 100 >= 5)
+        privilegies[msg.sender] = 4;
+    else if (newtokens >= 100000)
+        privilegies[msg.sender] = 3;
+    else if (newtokens >= 25000)
+        privilegies[msg.sender] = 2;
+    else
+        privilegies[msg.sender] = 1;
   }
   function() external payable {
     createTokens();
