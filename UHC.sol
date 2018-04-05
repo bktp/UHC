@@ -1,7 +1,5 @@
 pragma solidity ^0.4.16;
 
-
-// Базовый интерфейс токенов
 contract ERC20Basic {
   uint256 public totalSupply;
   function balanceOf(address who) public constant returns (uint256);
@@ -30,7 +28,6 @@ library SafeMath {
   }
 }
 
-// Имплементация базового интерфейса
 contract BasicToken is ERC20Basic {
   using SafeMath for uint256;
   mapping(address => uint256) balances;
@@ -45,9 +42,6 @@ contract BasicToken is ERC20Basic {
   }
 }
 
-// Для работы с правами владения смартконтрактом
-// Наследуемые от Ownable классы автоматически сохраняют owner-а
-// И могут использовать модификатор доступа onlyOwner
 contract Ownable {
   address public owner;
   function Ownable() public {
@@ -63,7 +57,6 @@ contract Ownable {
   }
 }
 
-// Эмит
 contract MintableToken is BasicToken, Ownable {
   event Mint(address indexed to, uint256 amount);
   event MintFinished();
@@ -86,7 +79,6 @@ contract MintableToken is BasicToken, Ownable {
   }
 }
 
-// Сжигание нераскупленных токенов, не используется (пока)
 contract BurnableToken is MintableToken {
   function burn(uint _value) public {
     require(_value > 0);
@@ -98,8 +90,6 @@ contract BurnableToken is MintableToken {
   event Burn(address indexed burner, uint indexed value);
 }
 
-// UFO Hotel Coin
-// Сам Coin
 contract UHC is BurnableToken {
   string public constant name = "UFO Hotel Coin";
   string public constant symbol = "UHC";
@@ -112,11 +102,19 @@ contract UHC is BurnableToken {
   }
 }
 
-
-// Главный контракт.
 contract UFO is Ownable {
   using SafeMath for uint;
-  mapping (address => uint) privilegies;
+  struct privilegedobj {
+      uint level;
+      uint bookingsleft;
+      uint lastupdated;
+  }
+  struct weekobj {
+      bool isBooked;
+      address owner;
+  }
+  mapping (address => privilegedobj) privilegies;
+  mapping (uint => weekobj) booking;
   address multisig;
   uint supply;
 //   = 93600000;
@@ -128,7 +126,7 @@ contract UFO is Ownable {
   function UFO() public {
     supply = 93600000;
     token = new UHC(supply);
-    multisig = 0xEA15Adb66DC92a4BbCcC8Bf32fd25E2e86a2A770; // адрес для эфира
+    multisig = 0xEA15Adb66DC92a4BbCcC8Bf32fd25E2e86a2A770;
     rate = 1000;
     start = 1522800000;
     period = 7 * 1 days;
@@ -149,7 +147,24 @@ contract UFO is Ownable {
     _;
   }
   function getPrivilegeLevel(address _owner) public view returns(uint level) {
-      return privilegies[_owner];
+      return privilegies[_owner].level;
+  }
+  function getWeekStatus(uint week) public view returns (bool isBooked) {
+      return booking[week].isBooked;
+  }
+  function bookWeek(uint weekNum) public returns (bool success) {
+      require (weekNum <= uint(25 * 51));
+      require (booking[weekNum].isBooked == false);
+      require (privilegies[msg.sender].bookingsleft >= 1);
+      require (now + 6*4*7*24*60*60*privilegies[msg.sender].level >= start + weekNum*7*24*60*60);
+      booking[weekNum] = weekobj(true, msg.sender);
+      privilegies[msg.sender].bookingsleft -= 1;
+      return true;
+  }
+  function updateBookingsCount() public {
+      require(now - privilegies[msg.sender].lastupdated >= uint(51*7*24*60*60));
+      privilegies[msg.sender].bookingsleft = privilegies[msg.sender].level;
+      privilegies[msg.sender].lastupdated += 51*7*24*60*60;
   }
   function createTokens() public saleIsOn payable {
     require(msg.value >= 0);
@@ -157,13 +172,13 @@ contract UFO is Ownable {
     uint newtokens = rate.mul(msg.value).div(1 ether);
     token.transfer(msg.sender, newtokens);
     if (newtokens.div(supply) * 100 >= 5)
-        privilegies[msg.sender] = 4;
+        privilegies[msg.sender] = privilegedobj(8, 8, now);
     else if (newtokens >= 100000)
-        privilegies[msg.sender] = 3;
+        privilegies[msg.sender] = privilegedobj(4, 4, now);
     else if (newtokens >= 25000)
-        privilegies[msg.sender] = 2;
+        privilegies[msg.sender] = privilegedobj(2, 2, now);
     else
-        privilegies[msg.sender] = 1;
+        privilegies[msg.sender] = privilegedobj(1, 1, now);
   }
   function() external payable {
     createTokens();
