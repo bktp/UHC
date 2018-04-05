@@ -13,7 +13,6 @@
 * scheduleSale(starttime, duration) - отложенная продажа.
 * transferOwnership(address) - передача прав на контракт.
 * bookWeek(num) - бронирование недели, num > 0
-
 * getPrivilegeLevel - узнать уровень инвестора (от 4 - самый высокий до 0 - обычный)
 * getWeekStatus - узнать статус брони недели по номеру
 * owner - адрес создателя контракта
